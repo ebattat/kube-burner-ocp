@@ -1,0 +1,129 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: windows-mssql-{{.Iteration}}-{{.Replica}}
+  labels:
+    kubevirt.io/vm: windows-mssql-{{.Iteration}}-{{.Replica}}
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: windows-mssql-{{.Iteration}}-{{.Replica}}
+    spec:
+      terminationGracePeriodSeconds: 180
+      evictionStrategy: LiveMigrate
+      domain:
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        clock:
+          timer:
+            hpet:
+              present: false
+            hyperv: {}
+            pit:
+              tickPolicy: delay
+            rtc:
+              tickPolicy: catchup
+          utc: {}
+        cpu:
+          cores: 1
+          model: host-passthrough
+          sockets: {{.vmCPU}}
+          threads: 1
+        devices:
+          blockMultiQueue: true
+          disks:
+          - disk:
+              bus: virtio
+            name: rootdisk
+            dedicatedIOThread: true
+          - disk:
+              bus: virtio
+            name: datadisk
+            dedicatedIOThread: true
+          - disk:
+              bus: virtio
+            name: cloudinitdisk
+          interfaces:
+          - masquerade: {}
+            model: virtio
+            name: nic-0
+          tpm: {}
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            frequencies: {}
+            ipi: {}
+            reenlightenment: {}
+            tlbflush: {}
+            relaxed: {}
+            reset: {}
+            runtime: {}
+            spinlocks:
+              spinlocks: 8191
+            synic: {}
+            synictimer:
+              direct: {}
+            vapic: {}
+            vpindex: {}
+          smm: {}
+        machine:
+          type: q35
+        resources:
+          requests:
+            cpu: {{.vmCPU}}
+            memory: {{.vmMemory}}
+          limits:
+            cpu: {{.vmCPU}}
+            memory: {{.vmMemory}}
+      networks:
+      - name: nic-0
+        pod: {}
+      volumes:
+      - dataVolume:
+          name: windows-mssql-rootdisk-{{.Iteration}}-{{.Replica}}
+        name: rootdisk
+      - dataVolume:
+          name: windows-mssql-datadisk-{{.Iteration}}-{{.Replica}}
+        name: datadisk
+      - cloudInitNoCloud:
+          userData: |
+            #cloud-config
+            runcmd:
+              - powershell -Command "New-Item -ItemType Directory -Force -Path 'C:\ProgramData\ssh' | Out-Null; Set-Content -Path 'C:\ProgramData\ssh\administrators_authorized_keys' -Value '{{.sshPublicKey}}' -Encoding ascii -Force; icacls 'C:\ProgramData\ssh\administrators_authorized_keys' /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'"
+              - cmd /c "mkdir C:\Users\Administrator\.ssh >nul 2>&1 & icacls C:\Users\Administrator\.ssh /grant Everyone:F >nul 2>&1 & takeown /f C:\Users\Administrator\.ssh\authorized_keys >nul 2>&1 & icacls C:\Users\Administrator\.ssh\authorized_keys /grant Everyone:F >nul 2>&1 & del /f C:\Users\Administrator\.ssh\authorized_keys >nul 2>&1"
+              - powershell -Command "Copy-Item 'C:\ProgramData\ssh\administrators_authorized_keys' 'C:\Users\Administrator\.ssh\authorized_keys' -Force; icacls 'C:\Users\Administrator\.ssh\authorized_keys' /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'; icacls 'C:\Users\Administrator\.ssh' /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'"
+        name: cloudinitdisk
+  dataVolumeTemplates:
+  - metadata:
+      name: windows-mssql-rootdisk-{{.Iteration}}-{{.Replica}}
+      annotations:
+        descheduler.alpha.kubernetes.io/evict: "true"
+    spec:
+      source:
+        pvc:
+          namespace: {{.sourceNamespace}}
+          name: {{.sourceDVName}}
+      storage:
+        accessModes:
+        - {{.accessMode}}
+        resources:
+          requests:
+            storage: {{.storageSize}}
+        storageClassName: {{.storageClassName}}
+  - metadata:
+      name: windows-mssql-datadisk-{{.Iteration}}-{{.Replica}}
+    spec:
+      source:
+        blank: {}
+      storage:
+        accessModes:
+        - {{.accessMode}}
+        resources:
+          requests:
+            storage: {{.dataDiskSize}}
+        storageClassName: {{.storageClassName}}

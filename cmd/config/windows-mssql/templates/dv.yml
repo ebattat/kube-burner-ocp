@@ -1,0 +1,19 @@
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: {{.dvName}}
+  annotations:
+    cdi.kubevirt.io/storage.deleteAfterCompletion: "false"
+    cdi.kubevirt.io/storage.bind.immediate.requested: "true"
+spec:
+  source:
+    http:
+      url: {{.windowsImageURL}}
+  storage:
+    accessModes:
+    - {{.accessMode}}
+    resources:
+      requests:
+        storage: {{.storageSize}}
+    storageClassName: {{.storageClassName}}
